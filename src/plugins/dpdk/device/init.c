@@ -233,7 +233,9 @@ dpdk_lib_init (dpdk_main_t * dm)
   vnet_hw_interface_t *hi;
   dpdk_device_t *xd;
   char *if_num_fmt;
-
+  uint8_t deviceList[64];
+  int deviceListIndex = 0;
+  
   /* vlib_buffer_t template */
   vec_validate_aligned (dm->per_thread_data, tm->n_vlib_mains - 1,
 			CLIB_CACHE_LINE_BYTES);
@@ -259,7 +261,7 @@ dpdk_lib_init (dpdk_main_t * dm)
   if ((clib_mem_get_default_hugepage_size () == 2 << 20) &&
       check_l3cache () == 0)
     dm->default_port_conf.n_rx_desc = dm->default_port_conf.n_tx_desc = 512;
-
+  
   RTE_ETH_FOREACH_DEV (port_id)
     {
       u8 addr[6];
@@ -352,16 +354,37 @@ dpdk_lib_init (dpdk_main_t * dm)
 	      if (xd->name == 0)
 		xd->name = format (xd->name, "Ethernet");
 	    }
-
-	  if (dr && dr->interface_number_from_port_id)
-	    xd->name = format (xd->name, "%u", port_id);
+		//
+		int existingState = 0;
+		int portNum = 0;
+		
+		if((pci_dev = dpdk_get_pci_device (&di))) {
+			if(strstr(di.driver_name, "net_mlx4")){
+				for (int i = 0; i < sizeof(deviceList); i++) {
+					if (deviceList[i] == pci_dev->addr.bus) {
+						dpdk_log_warn("Dev ID %u with driver %s already existing, giving next port", pci_dev->addr.bus, di.driver_name);
+						existingState = 1;
+						portNum++;
+					}
+				}
+			}
+			deviceList[deviceListIndex] = pci_dev->addr.bus;
+			deviceListIndex++;
+		}
+		
+		if(existingState == 1 && strstr(di.driver_name, "net_mlx4")){
+			xd->name = format (xd->name, "%u/%u/%u", pci_dev->addr.bus,
+			       pci_dev->addr.devid, portNum);
+		}else if (dr && dr->interface_number_from_port_id)
+	    xd->name = format (xd->name, "%u_1", port_id);
 	  else if ((pci_dev = dpdk_get_pci_device (&di)))
 	    xd->name = format (xd->name, if_num_fmt, pci_dev->addr.bus,
 			       pci_dev->addr.devid, pci_dev->addr.function);
-	  else
-	    xd->name = format (xd->name, "%u", port_id);
+	  else 
+	    xd->name = format (xd->name, "%u_2", port_id);
 	}
 
+      //xd->name = format(xd->name, "NIG");
       /* Handle representor devices that share the same PCI ID */
       if ((di.switch_info.domain_id != RTE_ETH_DEV_SWITCH_DOMAIN_ID_INVALID) &&
 	  (di.switch_info.port_id != (uint16_t) -1))
@@ -1536,7 +1559,7 @@ dpdk_init (vlib_main_t * vm)
   dm->conf = &dpdk_config_main;
 
   vec_add1 (dm->conf->eal_init_args, (u8 *) "vnet");
-
+ 
   dm->stat_poll_interval = DPDK_STATS_POLL_INTERVAL;
   dm->link_state_poll_interval = DPDK_LINK_POLL_INTERVAL;
 
