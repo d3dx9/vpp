@@ -357,30 +357,29 @@ dpdk_lib_init (dpdk_main_t * dm)
 		//
 		int existingState = 0;
 		int portNum = 0;
-		
 		if((pci_dev = dpdk_get_pci_device (&di))) {
 			if(strstr(di.driver_name, "net_mlx4")){
 				for (int i = 0; i < sizeof(deviceList); i++) {
-					if (deviceList[i] == pci_dev->addr.bus) {
-						dpdk_log_warn("Dev ID %u with driver %s already existing, giving next port", pci_dev->addr.bus, di.driver_name);
+					if (deviceList[i] == pci_dev->addr.devid) {
+						dpdk_log_warn("Dev ID %u with driver %s already existing, giving next port", pci_dev->addr.devid, di.driver_name);
 						existingState = 1;
 						portNum++;
 					}
 				}
+				deviceList[deviceListIndex] = pci_dev->addr.devid;
+	                        deviceListIndex++;
 			}
-			deviceList[deviceListIndex] = pci_dev->addr.bus;
-			deviceListIndex++;
 		}
 		
 		if(existingState == 1 && strstr(di.driver_name, "net_mlx4")){
-			xd->name = format (xd->name, "%u/%u/%u", pci_dev->addr.bus,
-			       pci_dev->addr.devid, portNum);
+			xd->name = format (xd->name, if_num_fmt, pci_dev->addr.bus,
+                               pci_dev->addr.devid, portNum);
 		}else if (dr && dr->interface_number_from_port_id)
 	    xd->name = format (xd->name, "%u_1", port_id);
-	  else if ((pci_dev = dpdk_get_pci_device (&di)))
+	  else if ((pci_dev = dpdk_get_pci_device (&di))){
 	    xd->name = format (xd->name, if_num_fmt, pci_dev->addr.bus,
 			       pci_dev->addr.devid, pci_dev->addr.function);
-	  else 
+	  }else 
 	    xd->name = format (xd->name, "%u_2", port_id);
 	}
 
